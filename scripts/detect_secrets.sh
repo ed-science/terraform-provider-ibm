@@ -9,9 +9,11 @@ found_secrets = []
 with open('.secrets.baseline', 'r') as f:
     baseline = json.loads(f.read())
     for file, secrets in baseline['results'].items():
-        for secret in secrets:
-            if secret.get('is_secret', True):
-                found_secrets.append((file, secret))
+        found_secrets.extend(
+            (file, secret)
+            for secret in secrets
+            if secret.get('is_secret', True)
+        )
 
 if found_secrets:
     print('Secrets were found in the source code!')
@@ -19,7 +21,13 @@ if found_secrets:
     print('Read more about the tool at https://github.com/ibm/detect-secrets#about\n\n')
     print('FOUND SECRETS:')
     for secret in found_secrets:
-        print('File: ' + secret[0] + ' Line: ' + str(secret[1]['line_number']) + ' Type: ' + secret[1]['type'])
+        print(
+            f'File: {secret[0]} Line: '
+            + str(secret[1]['line_number'])
+            + ' Type: '
+            + secret[1]['type']
+        )
+
     print('failure')
     exit(1)
 else:
