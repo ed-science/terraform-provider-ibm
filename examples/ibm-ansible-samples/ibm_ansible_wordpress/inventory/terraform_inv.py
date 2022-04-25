@@ -58,7 +58,7 @@ def parse_params():
     parser.add_argument('--tfstate', '-t', action='store', dest='tfstate', help='Terraform state file in current or specified directory (terraform.tfstate default)')
     parser.add_argument('--version', '-v', action='store_true', help='Show version')
     args = parser.parse_args()
-    # read location of terrafrom state file from ini if it exists 
+    # read location of terrafrom state file from ini if it exists
     if not args.tfstate:
         dirpath = os.getcwd()
         print ()
@@ -67,16 +67,16 @@ def parse_params():
         try:
             # attempt to open ini file first. Only proceed if found
             # assume execution from the ansible playbook directory
-            filepath = dirpath + "/inventory/" + ini_file
+            filepath = f"{dirpath}/inventory/{ini_file}"
             open(filepath) 
-            
+
         except FileNotFoundError:
             try:
                 # If file is not found it may be because command is executed
                 # in inventory directory
-                filepath = dirpath + "/" + ini_file
+                filepath = f"{dirpath}/{ini_file}"
                 open(filepath) 
-            
+
             except FileNotFoundError:
                 raise Exception("Unable to find or open specified ini file")
             else:
@@ -85,7 +85,7 @@ def parse_params():
             config.read(filepath)
 
         config.read(filepath)
-        tf_file = config['TFSTATE']['TFSTATE_FILE'] 
+        tf_file = config['TFSTATE']['TFSTATE_FILE']
         tf_file = os.path.expanduser(tf_file)
         args.tfstate = tf_file
     return args
@@ -130,13 +130,11 @@ class TerraformInventory:
             print(self.list_all())
 
     def list_all(self):
-        #tf_hosts = []
+        groups_json = {}
+        group_hosts = defaultdict(list)
         hosts_vars = {}
         attributes = {}
         groups = {}
-        groups_json = {}
-        inv_output = {}
-        group_hosts = defaultdict(list)
         for name, attributes, groups in self.get_tf_instances():
             #tf_hosts.append(name)
             hosts_vars[name] = attributes
@@ -145,9 +143,8 @@ class TerraformInventory:
                 group_hosts[group].append(name)
                 #print(group_hosts.items())
 
-        for group in group_hosts:
-            inv_output[group] = {'hosts': group_hosts[group]}
-        inv_output["_meta"] = {'hostvars': hosts_vars} 
+        inv_output = {group: {'hosts': group_hosts[group]} for group in group_hosts}
+        inv_output["_meta"] = {'hostvars': hosts_vars}
         return json.dumps(inv_output, indent=2)    
         #return json.dumps({'all': {'hosts': hosts}, '_meta': {'hostvars': hosts_vars}}, indent=2)
 
@@ -182,7 +179,7 @@ class TerraformInventory:
                     # user_metadata is an optional IBM provider value
                     if 'user_metadata' in tf_attrib:
                             attributes['metadata'] = tf_attrib['user_metadata']
-                        
+
                     #print (attributes["tags"])
                     #tag of form group: xxxxxxx is used to define ansible host group
                     for value in list(attributes["tags"]):
@@ -199,19 +196,14 @@ class TerraformInventory:
 
 
                 if resource['type'] == 'ibm_cis_global_load_balancer':
-                    #provider = 'ibm'
                     tf_attrib = resource['primary']['attributes']
                     name = tf_attrib['name']
-                    group = []
-
                     attributes = {
                         'id': tf_attrib['id'],
                         'dns_name': tf_attrib['name'],                       
                     }
 
-                    # CIS loadbalancer's do not support tagging. So force group
-                    group.append('cisgloballoadbalancer')
-                
+                    group = ['cisgloballoadbalancer']
                     yield name, attributes, group
 
 
@@ -221,29 +213,20 @@ class TerraformInventory:
 
 
 
-                if resource['type'] == 'ibm_lbaas':
-                    #provider = 'ibm'
-                    tf_attrib = resource['primary']['attributes']
-                    name = tf_attrib['name']
-                    group = []
+                if resource['type'] != 'ibm_lbaas':
+                    continue
+                tf_attrib = resource['primary']['attributes']
+                name = tf_attrib['name']
+                attributes = {
+                    'id': tf_attrib['id'],
+                    'vip': tf_attrib['vip'],                       
+                    'region': tf_attrib['datacenter'],                       
+                    'provider': 'ibm',
+                    'tags': parse_list(tf_attrib, 'tags'),
+                }
 
-                    attributes = {
-                        'id': tf_attrib['id'],
-                        'vip': tf_attrib['vip'],                       
-                        'region': tf_attrib['datacenter'],                       
-                        'provider': 'ibm',
-                        'tags': parse_list(tf_attrib, 'tags'),
-                    }
-
-                    # cloudloadbalancer's do not support tagging. So force group
-                    group.append('cloudloadbalancer')
-                
-                    yield name, attributes, group
-
-
-
-                else:    
-                    continue        
+                group = ['cloudloadbalancer']
+                yield name, attributes, group        
              
 
 
